@@ -322,6 +322,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
@@ -359,3 +361,21 @@ jobs:
           path: app/build/outputs/apk/firetv/debug/app-firetv-debug.apk
           retention-days: 30
           if-no-files-found: error
+
+      # Commit the APK into this branch so it can be fetched through the
+      # contents API (the blob storage host is not reachable from our client).
+      - name: Commit APK into branch for API retrieval
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK=app/build/outputs/apk/firetv/debug/app-firetv-debug.apk
+          jq -n \
+            --arg m "ci: store debug APK for retrieval" \
+            --rawfile f "$APK" \
+            '{message:$m, content:($f|@base64), branch:"${{ github.ref_name }}"}' > /tmp/payload.json
+          curl -fsS -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/contents/artifacts/phairplay-firetv-debug.apk.b64" \
+            --data-binary @/tmp/payload.json
