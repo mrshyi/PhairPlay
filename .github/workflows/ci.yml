@@ -315,13 +315,12 @@ jobs:
 
   build-only:
     name: Build only (manual, publishes nothing)
-    # WHAT: a manual run that builds the release artefacts and stores them
-    #      in the artefact store of the run.
-    # WHY: the publication of a release stays an explicit act of the owner.
-    #      This job never talks to the Play Console, never creates a tag and
-    #      never pushes anything; it only builds and uploads the files.
+    # WHAT: a manual run that builds the firetv debug APK on a GitHub-hosted
+    #      runner and stores it in the artefact store of the run.
+    # WHY: debug builds need no signing credentials, so they can run on a
+    #      hosted runner without any self-hosted infrastructure.
     if: github.event_name == 'workflow_dispatch'
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 90
 
     steps:
@@ -346,25 +345,17 @@ jobs:
       - name: Write local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
-      # The release build needs the signing credentials. They are only in the
-      # environment of the runner; without them the artefacts stay unsigned.
-      - name: Build the release artefacts
-        run: |
-          ./gradlew \
-            :app:assembleGoogletvRelease \
-            :app:assembleFiretvRelease \
-            :app:bundleGoogletvRelease \
-            :app:bundleFiretvRelease \
-            --stacktrace
+      # Debug build needs no signing credentials, so it works on a hosted
+      # runner. Only the firetv flavour is built (the target device is an
+      # Android TV), which keeps the build time short.
+      - name: Build the firetv debug APK
+        run: ./gradlew :app:assembleFiretvDebug --stacktrace
 
-      - name: Upload the release artefacts
+      - name: Upload the firetv debug APK
         uses: actions/upload-artifact@v4
-        if: always()
+        if: success()
         with:
-          name: release-artefacts
-          path: |
-            app/build/outputs/apk/googletv/release/
-            app/build/outputs/apk/firetv/release/
-            app/build/outputs/bundle/
+          name: phairplay-firetv-debug
+          path: app/build/outputs/apk/firetv/debug/app-firetv-debug.apk
           retention-days: 30
           if-no-files-found: error
